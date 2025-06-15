@@ -1,0 +1,23 @@
+{
+  "versions": [
+    {
+      "version": "1.0.0",
+      "kernel_file": "kernel-v1.0.0.img",
+      "file_size": 21,
+      "checksum": "sha256:debfcab7c09763e1e4c063c73285e220366b68120dacee7028bfdbb90632ebf9",
+      "release_date": "2025-06-15T05:14:20.937279Z",
+      "description": "Test Kernel version with security fix",
+      "download_url": "/kernels/kernel-v1.0.0.img"
+    },
+    {
+      "version": "1.0.2",
+      "kernel_file": "kernel-v1.0.2.img",
+      "file_size": 21,
+      "checksum": "sha256:debfcab7c09763e1e4c063c73285e220366b68120dacee7028bfdbb90632ebf9",
+      "release_date": "2025-06-15T04:03:12.025055Z",
+      "description": "Test Kernel Version 1.0.2",
+      "download_url": "/kernels/kernel-v1.0.2.img"
+    }
+  ],
+  "latest": "1.0.0"
+}
