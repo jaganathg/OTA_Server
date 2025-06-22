@@ -1,3 +1,4 @@
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -20,12 +21,12 @@ pub struct Paths {
 }
 
 impl ServerConfig {
-    pub async fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let content = tokio::fs::read_to_string(path).await?;
         let config: ServerConfig = toml::from_str(&content)?;
         Ok(config)
     }
-    
+
     pub async fn ensure_directories(&self) -> Result<(), std::io::Error> {
         tokio::fs::create_dir_all(&self.paths.kernels_dir).await?;
         tokio::fs::create_dir_all(&self.paths.metadata_dir).await?;

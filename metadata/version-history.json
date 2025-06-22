@@ -17,7 +17,16 @@
       "release_date": "2025-06-15T04:03:12.025055Z",
       "description": "Test Kernel Version 1.0.2",
       "download_url": "/kernels/kernel-v1.0.2.img"
+    },
+    {
+      "version": "2.0.0",
+      "kernel_file": "kernel-v2.0.0.img",
+      "file_size": 40,
+      "checksum": "sha256:72003c56a5b749ee21c9bd27bc6afe1b8212809b92ec6b395d9ea2f398b5582a",
+      "release_date": "2025-06-22T05:48:52.731930Z",
+      "description": "Test Kernel version 2.0.0",
+      "download_url": "/kernels/kernel-v2.0.0.img"
     }
   ],
-  "latest": "1.0.0"
+  "latest": "2.0.0"
 }

@@ -1,14 +1,16 @@
-use warp::{Filter, Reply, Rejection};
-use std::path::PathBuf;
-use crate::metadata::{KernelInfo, VersionResponse};
-use crate::config::ServerConfig;
 use crate::checksum::calculate_file_checksum;
+use crate::config::ServerConfig;
+use crate::metadata::KernelInfo;
+use std::path::PathBuf;
+use tracing::info;
+use warp::{Filter, Rejection, Reply};
 
 // Health check endpoint
 pub fn health() -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone {
-    warp::path("health")
-        .and(warp::get())
-        .map(|| warp::reply::json(&serde_json::json!({"status": "healthy"})))
+    warp::path("health").and(warp::get()).map(|| {
+        info!("Health check request received");
+        warp::reply::json(&serde_json::json!({"status": "healthy"}))
+    })
 }
 
 // Version info endpoint
@@ -33,17 +35,17 @@ pub fn kernels(
 }
 
 async fn get_latest_version(config: ServerConfig) -> Result<Box<dyn Reply>, Rejection> {
+    info!("Version check request received");
     let metadata_path = PathBuf::from(&config.paths.metadata_dir).join("latest.json");
-    
+
     match tokio::fs::read_to_string(&metadata_path).await {
         Ok(content) => {
             match serde_json::from_str::<KernelInfo>(&content) {
                 Ok(kernel_info) => {
-                    let response = VersionResponse {
-                        latest_version: kernel_info.version.clone(),
-                        kernel_info,
-                    };
-                    Ok(Box::new(warp::reply::json(&response)))
+                    info!("Returning version info: {}", kernel_info.version);
+                    // Return the client-facing format with expected field names
+                    let client_info = kernel_info.to_client_format();
+                    Ok(Box::new(warp::reply::json(&client_info)))
                 }
                 Err(_) => {
                     let error_response = serde_json::json!({"error": "Invalid metadata format"});
@@ -68,16 +70,18 @@ async fn serve_kernel_file(
     filename: String,
     config: ServerConfig,
 ) -> Result<Box<dyn Reply>, Rejection> {
+    info!("Kernel file request received: {}", filename);
     let file_path = PathBuf::from(&config.paths.kernels_dir).join(&filename);
-    
+
     if !file_path.exists() {
+        info!("Kernel file not found: {}", filename);
         let error_response = serde_json::json!({"error": "File not found"});
         return Ok(Box::new(warp::reply::with_status(
             warp::reply::json(&error_response),
             warp::http::StatusCode::NOT_FOUND,
         )));
     }
-    
+
     // Calculate checksum for verification
     let checksum = match calculate_file_checksum(&file_path).await {
         Ok(hash) => hash,
@@ -89,15 +93,17 @@ async fn serve_kernel_file(
             )));
         }
     };
-    
+
     match tokio::fs::read(&file_path).await {
         Ok(contents) => {
+            info!(
+                "Serving kernel file: {} ({} bytes, checksum: {})",
+                filename,
+                contents.len(),
+                checksum
+            );
             Ok(Box::new(warp::reply::with_header(
-                warp::reply::with_header(
-                    contents,
-                    "content-type",
-                    "application/octet-stream",
-                ),
+                warp::reply::with_header(contents, "content-type", "application/octet-stream"),
                 "x-checksum",
                 checksum,
             )))
