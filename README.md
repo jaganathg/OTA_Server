@@ -1,39 +1,65 @@
-# OTA Server Project Documentation
+# OTA (Over-The-Air) Update Server
 
-This document provides an overview of the OTA (Over-the-Air) server project, its design, architecture, and how to use it.
+A simple, robust server for managing and distributing firmware/kernel updates for IoT devices. This server provides a RESTful API for devices to check for new versions and download them. It also includes a command-line interface for easy administration.
 
-## Project Summary & Architecture
+---
 
-This OTA update server is a well-designed Rust application with a modular structure. It serves kernel updates to client devices and provides a command-line interface (CLI) for administration.
+## ✨ Features
 
-- **Configuration**: The server is configured via a TOML file (`config/server.toml`), allowing easy management of server settings and file paths.
-- **Web Server**: A `warp` web server exposes API endpoints for clients to check for new versions and download kernel files.
-- **CLI**: A `clap`-based CLI facilitates administrative tasks like adding new kernel versions and listing available versions.
-- **Metadata Management**: The `MetadataManager` handles all kernel metadata, which is stored in JSON format (`metadata/latest.json` and `metadata/version-history.json`).
-- **File Integrity**: SHA-256 checksums are used to ensure the integrity of kernel files during transfer.
+- **RESTful API**: Simple endpoints for version checks and kernel downloads.
+- **CLI Administration**: Easy-to-use commands for adding and listing kernel versions.
+- **mDNS Service Discovery**: Devices can automatically discover the OTA server on the local network.
+- **Configuration-driven**: Server behavior is controlled via a simple TOML configuration file.
+- **Checksum Verification**: Ensures integrity of kernel files (future implementation).
 
-## Architecture Flow
+---
 
-There are two primary workflows for the OTA server:
+## 📂 Project Structure
 
-1.  **Admin Flow (CLI)**:
-    - An administrator uses the CLI to add a new kernel.
-    - The `main.rs` module parses the command and arguments.
-    - `MetadataManager` is invoked to:
-        - Calculate the SHA-256 checksum of the kernel file.
-        - Create new metadata for the kernel.
-        - Update `metadata/latest.json` with the new version information.
-        - Append the new version to `metadata/version-history.json`.
+The project is organized into several modules, each with a specific responsibility:
 
-2.  **Client Flow (API)**:
-    - A client device sends a request to the `GET /version` endpoint to check for the latest kernel version.
-    - If an update is available, the device sends a request to `GET /kernels/<filename>` to download the kernel file.
-    - The server responds with the kernel file and an `x-checksum` header containing the SHA-256 checksum.
-    - The client can then verify the integrity of the downloaded file using the checksum.
+| Module               | Description                                                                                              |
+| -------------------- | -------------------------------------------------------------------------------------------------------- |
+| `main.rs`            | The main entry point of the application. Handles CLI command parsing and dispatches to the correct logic.  |
+| `cli.rs`             | Defines the command-line interface structure and arguments using the `clap` crate.                       |
+| `config.rs`          | Manages server configuration, loading settings from a `server.toml` file.                                |
+| `handlers.rs`        | Contains the `warp` web handlers for the API endpoints (`/health`, `/version`, `/kernels`).                |
+| `metadata.rs`        | Defines the data structures for kernel metadata (e.g., `KernelInfo`, `VersionHistory`).                  |
+| `metadata_manager.rs`| Handles the logic for reading, writing, and managing kernel metadata files.                              |
+| `checksum.rs`        | A utility module for calculating file checksums to ensure data integrity.                                |
+| `mdns.rs`            | Implements mDNS/DNS-SD service advertisement to make the server discoverable on the local network.         |
 
-## Mermaid Diagram
+---
 
-The following diagram illustrates the architecture of the OTA server:
+## 🌊 Control Flow
+
+There are two primary workflows in this application: the **Admin Flow** (for managing kernels via the CLI) and the **Client Flow** (for devices to check and download updates via the API).
+
+### 1. Admin Flow (CLI)
+
+This flow is initiated by an administrator using the command line to manage kernel versions.
+
+1.  **Command Execution**: An admin runs a command like `cargo run -- add-kernel ...` or `cargo run -- list`.
+2.  **CLI Parsing**: `main.rs` receives the command-line arguments, and `clap` (in `cli.rs`) parses them into a structured `Cli` command.
+3.  **Command Dispatch**: Based on the command (`AddKernel` or `List`), `main.rs` calls the corresponding function (`add_kernel_command` or `list_kernels_command`).
+4.  **Metadata Management**: The dispatched function creates an instance of `MetadataManager`.
+    -   **For `add-kernel`**: The `add_kernel` method is called. It calculates the new kernel file's checksum, creates metadata, and updates `latest.json` and `version-history.json`.
+    -   **For `list`**: The `list_versions` method is called. It reads `version-history.json` and prints a formatted list to the console.
+
+### 2. Client Flow (API)
+
+This flow is initiated by a device on the network checking for or downloading an update.
+
+1.  **Server Start**: The server must be running via the `cargo run -- start` command. `main.rs` starts the `warp` server, which listens for HTTP requests.
+2.  **Service Discovery**: A client device can discover the OTA server's IP address and port by listening for the `_ota._tcp.local` mDNS advertisement.
+3.  **API Request**: The device sends an HTTP `GET` request to an API endpoint (e.g., `/version`).
+4.  **Request Handling**: `warp` routes the request to the appropriate handler in `handlers.rs`.
+    -   **For `/version`**: The handler reads `latest.json` and returns the latest kernel's metadata as a JSON response.
+    -   **For `/kernels/<filename>`**: The handler finds the requested file in the `kernels` directory and streams it back to the client.
+
+### Architecture Diagram
+
+The following diagram visualizes the interaction between the different components:
 
 ```mermaid
 graph TD;
@@ -62,7 +88,6 @@ graph TD;
     subgraph "Web API (warp)"
         API_Version["GET /version"] --> LatestJSON;
         API_Kernel["GET /kernels/:filename"] --> KernelFile["kernels/"];
-        API_Kernel -- "Calculates" --> Checksum;
         
         Handlers -- "Routes to" --> API_Version;
         Handlers -- "Routes to" --> API_Kernel;
@@ -70,7 +95,7 @@ graph TD;
     end
 
     API_Version --> Client_Check;
-    API_Kernel -- "Returns file with x-checksum header" --> Client_Download;
+    API_Kernel -- "Returns file" --> Client_Download;
 
     style Client_Check fill:#f9f,stroke:#333,stroke-width:2px;
     style Client_Download fill:#f9f,stroke:#333,stroke-width:2px;
@@ -78,73 +103,67 @@ graph TD;
     style CLI_List fill:#ccf,stroke:#333,stroke-width:2px;
 ```
 
-## Implementation Details (File-by-File)
+---
 
-This section provides a detailed breakdown of each file in the `src` directory, explaining their roles and functionalities.
+## ⚙️ Configuration
 
-### `main.rs`
+The server is configured using the `config/server.toml` file. If the file is not found, default values are used.
 
-- **Purpose**: This is the entry point of the application. It initializes the command-line interface (CLI) and orchestrates the different parts of the server.
-- **Functionality**:
-    - **CLI Parsing**: It uses the `clap` crate to parse command-line arguments.
-    - **Command Handling**: Based on the parsed command (`start`, `add-kernel`, or `list`), it calls the appropriate function.
-    - **Server Initialization**: The `start_server` function configures and starts the `warp` web server. It sets up the API routes and binds to the specified address.
-    - **Admin Commands**: The `add_kernel_command` and `list_kernels_command` functions handle the administrative tasks of adding new kernels and listing existing ones. They interact with the `MetadataManager` to perform these operations.
+```toml
+# config/server.toml
 
-### `cli.rs`
+[server]
+host = "0.0.0.0"
+port = 8080
 
-- **Purpose**: Defines the structure and commands of the command-line interface using the `clap` crate.
-- **Functionality**:
-    - **`Cli` Struct**: The main struct that represents the CLI.
-    - **`Commands` Enum**: Defines the available subcommands:
-        - `Start`: To start the web server. It takes an optional `--config` argument.
-        - `AddKernel`: To add a new kernel version. It requires `--version`, `--file`, and `--description` arguments.
-        - `List`: To list all available kernel versions.
+[paths]
+kernels_dir = "./kernels"
+metadata_dir = "./metadata"
+```
 
-### `config.rs`
+---
 
-- **Purpose**: Manages the server's configuration.
-- **Functionality**:
-    - **`ServerConfig` Struct**: Holds the entire configuration, including server settings (`host`, `port`) and file paths (`kernels_dir`, `metadata_dir`).
-    - **Loading from File**: The `load_from_file` function reads a TOML configuration file and deserializes it into a `ServerConfig` struct.
-    - **Default Configuration**: Implements the `Default` trait to provide a fallback configuration if the specified file is not found.
-    - **Directory Management**: The `ensure_directories` function ensures that the kernel and metadata directories exist, creating them if necessary.
+## 🚀 Usage
 
-### `metadata.rs`
+### Running the Server
 
-- **Purpose**: Defines the data structures for kernel metadata.
-- **Functionality**:
-    - **`KernelInfo` Struct**: Represents the metadata for a single kernel version, including its version, filename, size, checksum, release date, and description.
-    - **`VersionResponse` Struct**: A struct used for the `/version` API endpoint, containing information about the latest kernel.
-    - **`VersionHistory` Struct**: A struct that holds a list of all kernel versions and a reference to the latest version.
+To start the server, use the `start` command. It will host the API and advertise itself via mDNS.
 
-### `metadata_manager.rs`
+<pre style="background-color:#2d2d2d; color:#feda75; padding:1em; border-radius:5px;">
+cargo run -- start --config config/server.toml
+</pre>
 
-- **Purpose**: Handles all operations related to kernel metadata.
-- **Functionality**:
-    - **`MetadataManager` Struct**: Manages the paths to the kernels and metadata directories.
-    - **Adding Kernels**: The `add_kernel` function:
-        - Calculates the SHA-256 checksum of the kernel file.
-        - Creates a `KernelInfo` struct with the new metadata.
-        - Updates `metadata/latest.json` with the new version.
-        - Appends the new version to `metadata/version-history.json`.
-    - **Listing Versions**: The `list_versions` function reads `metadata/version-history.json` and returns the list of all available kernel versions.
+### Managing Kernels
 
-### `checksum.rs`
+You can manage kernel versions using the CLI.
 
-- **Purpose**: Provides functionality for calculating file checksums.
-- **Functionality**:
-    - **`calculate_file_checksum` Function**: Takes a file path and calculates its SHA-256 checksum. It reads the file in chunks to handle large files efficiently.
-    - **Checksum Verification**: The `_verify_checksum` function (used for testing) can be used to verify a checksum against a given data buffer.
+**1. Add a New Kernel Version**
 
-### `handlers.rs`
+This command adds a new kernel file to the metadata, making it available for devices.
 
-- **Purpose**: Contains the `warp` handlers for the API endpoints.
-- **Functionality**:
-    - **`/health` Endpoint**: A simple health check endpoint that returns a "healthy" status.
-    - **`/version` Endpoint**:
-        - Reads `metadata/latest.json`.
-        - Returns the latest kernel version information as a JSON response.
-    - **`/kernels/:filename` Endpoint**:
-        - Serves a kernel file from the `kernels` directory.
-        - Calculates the file's checksum and includes it in the `x-checksum` response header for client-side verification. 
+<pre style="background-color:#2d2d2d; color:#81a1c1; padding:1em; border-radius:5px;">
+cargo run -- add-kernel --version "v1.0.1" --file "path/to/kernel.img" --description "Bug fixes and performance improvements." --config config/server.toml
+</pre>
+
+**2. List Available Kernels**
+
+This command displays the latest version and a history of all available kernel versions.
+
+<pre style="background-color:#2d2d2d; color:#a3be8c; padding:1em; border-radius:5px;">
+cargo run -- list --config config/server.toml
+</pre>
+
+---
+
+## 🌐 API Endpoints
+
+The server exposes the following endpoints:
+
+| Method | Path                  | Description                                            |
+| ------ | --------------------- | ------------------------------------------------------ |
+| `GET`  | `/health`             | A simple health check endpoint. Returns `200 OK`.      |
+| `GET`  | `/version`            | Returns metadata for the latest available version.     |
+| `GET`  | `/version/history`    | Returns the complete version history.                  |
+| `GET`  | `/kernels/<filename>` | Downloads the specified kernel file.                   |
+
+This provides a clear and useful `PROJECT_OVERVIEW.md` for your project. 
