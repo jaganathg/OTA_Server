@@ -165,5 +165,3 @@ The server exposes the following endpoints:
 | `GET`  | `/version`            | Returns metadata for the latest available version.     |
 | `GET`  | `/version/history`    | Returns the complete version history.                  |
 | `GET`  | `/kernels/<filename>` | Downloads the specified kernel file.                   |
-
-This provides a clear and useful `PROJECT_OVERVIEW.md` for your project. 
