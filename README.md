@@ -165,3 +165,5 @@ The server exposes the following endpoints:
 | `GET`  | `/version`            | Returns metadata for the latest available version.     |
 | `GET`  | `/version/history`    | Returns the complete version history.                  |
 | `GET`  | `/kernels/<filename>` | Downloads the specified kernel file.                   |
+
+This project is in connection with "OTA_Client"
